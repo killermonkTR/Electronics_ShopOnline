@@ -44,14 +44,15 @@ namespace Electronics_Shop2.Managers
 
                 // Create order first - set a default payment type or allow NULL
                 string orderQuery = @"INSERT INTO Orders (id_Staff, id_Client, id_Payment_Type, Order_Date, Status, Total_Price) 
-                                VALUES (@staff, @client, 1, CURDATE(), 'Processing', 0.00);
-                                SELECT LAST_INSERT_ID();";
+                VALUES (@staff, @client, 1, @orderDate, 'Processing', 0.00)
+                RETURNING id_Order;";
 
                 int orderId;
                 using (var orderCmd = new NpgsqlCommand(orderQuery, connection))
                 {
                     orderCmd.Parameters.AddWithValue("@staff", currentStaffId);
                     orderCmd.Parameters.AddWithValue("@client", clientId);
+                    orderCmd.Parameters.AddWithValue("@orderDate", DateTime.Today);
                     orderId = Convert.ToInt32(orderCmd.ExecuteScalar());
                 }
 

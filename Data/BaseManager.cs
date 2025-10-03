@@ -10,6 +10,8 @@ namespace Electronics_Shop2.Data
 
         public BaseManager()
         {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.InputEncoding = System.Text.Encoding.UTF8;
             dbConnection = new DatabaseConnection();
             connection = dbConnection.GetConnection();
         }

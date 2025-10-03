@@ -106,7 +106,7 @@ namespace Electronics_Shop2.Managers
 
                 string query = @"INSERT INTO Products (Product_Name, id_Category, id_Model, Warranty, Price, Stock_Quantity) 
                             VALUES (@name, @category, @model, @warranty, @price, @stock);
-                            SELECT LAST_INSERT_ID();";
+                            RETURNING id_Product;";
 
                 using var command = new NpgsqlCommand(query, connection);
                 command.Parameters.AddWithValue("@name", name);

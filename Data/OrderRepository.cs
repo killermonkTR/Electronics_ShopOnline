@@ -24,7 +24,7 @@ namespace Electronics_Shop2.Data
                 var query = @"
                     INSERT INTO Orders (id_Staff, id_Client, id_Payment_Type, Order_Date, Total_Price, Status)
                     VALUES (@StaffId, @ClientId, @PaymentTypeId, @OrderDate, @TotalPrice, @Status)
-                    RETURNING id_Order;"; // Changed from SELECT LAST_INSERT_ID()
+                    RETURNING id_Order;"; 
 
                 using (var command = new NpgsqlCommand(query, connection))
                 {

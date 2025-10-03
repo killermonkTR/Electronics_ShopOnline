@@ -97,14 +97,15 @@ public void ViewAllStaff()
             if (!decimal.TryParse(Console.ReadLine(), out decimal salary)) return -1;
 
             string query = @"INSERT INTO Staff (Staff_Name, id_Position, Phone_Number, Salary, Hire_Date) 
-                        VALUES (@name, @position, @phone, @salary, CURDATE());
-                        SELECT LAST_INSERT_ID();";
+            VALUES (@name, @position, @phone, @salary, @hireDate)
+            RETURNING id_Staff;";
 
             using var command = new NpgsqlCommand(query, connection);
             command.Parameters.AddWithValue("@name", name);
             command.Parameters.AddWithValue("@position", positionId);
             command.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(phone) ? DBNull.Value : phone);
             command.Parameters.AddWithValue("@salary", salary);
+            command.Parameters.AddWithValue("@hireDate", DateTime.Today); // Add this parameter
 
             int newId = Convert.ToInt32(command.ExecuteScalar());
             Console.WriteLine($"✅ Staff '{name}' added with ID: {newId}");

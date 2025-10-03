@@ -10,7 +10,7 @@ namespace Electronics_Shop2.Data
 
         public DatabaseConnection()
         {
-            _connectionString = "xxx";
+            _connectionString = "x";
         }
 
         public NpgsqlConnection GetConnection() // Changed return type

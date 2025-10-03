@@ -22,8 +22,7 @@ namespace Electronics_Shop2.Managers
 
                 try
                 {
-                    EnsureConnectionOpen(); // ✅ OPEN CONNECTION
-
+                    // Don't open connection here - let each method handle its own connection
                     switch (choice)
                     {
                         case "1": ViewAllBrands(); break;
@@ -38,10 +37,6 @@ namespace Electronics_Shop2.Managers
                 {
                     HandleException(ex, "brand management");
                 }
-                finally
-                {
-                    EnsureConnectionClosed(); // ✅ CLOSE CONNECTION
-                }
 
                 Console.WriteLine("Press any key to continue...");
                 Console.ReadKey();
@@ -52,7 +47,7 @@ namespace Electronics_Shop2.Managers
         {
             try
             {
-                EnsureConnectionOpen(); // ✅ OPEN CONNECTION
+                EnsureConnectionOpen();
 
                 Console.WriteLine("\n=== All Brands ===");
                 string query = "SELECT id_Brand, Brand_Name FROM Brands ORDER BY Brand_Name";
@@ -62,12 +57,16 @@ namespace Electronics_Shop2.Managers
 
                 while (reader.Read())
                 {
-                    Console.WriteLine($"ID: {reader["id_Brand"]} | Name: {GetSafeString(reader["Brand_Name"])}");
+                    Console.WriteLine($"ID: {reader["id_Brand"]} | Name: {reader["Brand_Name"]}");
                 }
             }
             catch (Exception ex)
             {
                 HandleException(ex, "viewing brands");
+            }
+            finally
+            {
+                EnsureConnectionClosed();
             }
         }
 
@@ -75,10 +74,10 @@ namespace Electronics_Shop2.Managers
         {
             try
             {
-                EnsureConnectionOpen(); // ✅ OPEN CONNECTION
+                EnsureConnectionOpen();
 
                 Console.Write("Enter brand name: ");
-                string brandName = Console.ReadLine() ?? "";
+                string brandName = Console.ReadLine()?.Trim() ?? "";
 
                 if (string.IsNullOrWhiteSpace(brandName))
                 {
@@ -87,7 +86,7 @@ namespace Electronics_Shop2.Managers
                 }
 
                 // Check if brand already exists
-                string checkQuery = "SELECT id_Brand FROM Brands WHERE Brand_Name = @name";
+                string checkQuery = "SELECT id_Brand FROM Brands WHERE LOWER(Brand_Name) = LOWER(@name)";
                 using var checkCmd = new NpgsqlCommand(checkQuery, connection);
                 checkCmd.Parameters.AddWithValue("@name", brandName);
 
@@ -98,19 +97,38 @@ namespace Electronics_Shop2.Managers
                     return Convert.ToInt32(existingId);
                 }
 
-                // Insert new brand
-                string insertQuery = "INSERT INTO Brands (Brand_Name) VALUES (@name); SELECT LAST_INSERT_ID();";
+                // Insert new brand - FIXED: Removed semicolon before RETURNING
+                string insertQuery = "INSERT INTO Brands (Brand_Name) VALUES (@name) RETURNING id_Brand";
                 using var insertCmd = new NpgsqlCommand(insertQuery, connection);
                 insertCmd.Parameters.AddWithValue("@name", brandName);
 
-                int newBrandId = Convert.ToInt32(insertCmd.ExecuteScalar());
-                Console.WriteLine($"✅ Brand '{brandName}' added successfully with ID: {newBrandId}");
-                return newBrandId;
+                var result = insertCmd.ExecuteScalar();
+                if (result != null)
+                {
+                    int newBrandId = Convert.ToInt32(result);
+                    Console.WriteLine($"✅ Brand '{brandName}' added successfully with ID: {newBrandId}");
+                    return newBrandId;
+                }
+                else
+                {
+                    Console.WriteLine("❌ Failed to add brand - no ID returned");
+                    return -1;
+                }
+            }
+            catch (PostgresException pgEx)
+            {
+                Console.WriteLine($"❌ Database error: {pgEx.MessageText}");
+                Console.WriteLine($"SQL State: {pgEx.SqlState}");
+                return -1;
             }
             catch (Exception ex)
             {
                 HandleException(ex, "adding brand");
                 return -1;
+            }
+            finally
+            {
+                EnsureConnectionClosed();
             }
         }
 
@@ -118,7 +136,7 @@ namespace Electronics_Shop2.Managers
         {
             try
             {
-                EnsureConnectionOpen(); // ✅ OPEN CONNECTION
+                EnsureConnectionOpen();
 
                 ViewAllBrands();
                 Console.Write("\nEnter brand ID to update: ");
@@ -129,7 +147,26 @@ namespace Electronics_Shop2.Managers
                 }
 
                 Console.Write("Enter new brand name: ");
-                string newName = Console.ReadLine() ?? "";
+                string newName = Console.ReadLine()?.Trim() ?? "";
+
+                if (string.IsNullOrWhiteSpace(newName))
+                {
+                    Console.WriteLine("Brand name cannot be empty!");
+                    return;
+                }
+
+                // Check if new name already exists (excluding current brand)
+                string checkQuery = "SELECT id_Brand FROM Brands WHERE LOWER(Brand_Name) = LOWER(@name) AND id_Brand != @id";
+                using var checkCmd = new NpgsqlCommand(checkQuery, connection);
+                checkCmd.Parameters.AddWithValue("@name", newName);
+                checkCmd.Parameters.AddWithValue("@id", brandId);
+
+                var existingId = checkCmd.ExecuteScalar();
+                if (existingId != null)
+                {
+                    Console.WriteLine($"Brand '{newName}' already exists with ID: {existingId}");
+                    return;
+                }
 
                 string query = "UPDATE Brands SET Brand_Name = @name WHERE id_Brand = @id";
                 using var command = new NpgsqlCommand(query, connection);
@@ -146,13 +183,17 @@ namespace Electronics_Shop2.Managers
             {
                 HandleException(ex, "updating brand");
             }
+            finally
+            {
+                EnsureConnectionClosed();
+            }
         }
 
         public void DeleteBrand()
         {
             try
             {
-                EnsureConnectionOpen(); // ✅ OPEN CONNECTION
+                EnsureConnectionOpen();
 
                 ViewAllBrands();
                 Console.Write("\nEnter brand ID to delete: ");
@@ -162,7 +203,7 @@ namespace Electronics_Shop2.Managers
                     return;
                 }
 
-                // Check if brand has models/products
+                // Check if brand has models
                 string checkQuery = @"SELECT COUNT(*) FROM Phone_Models WHERE id_Brand = @id";
                 using var checkCmd = new NpgsqlCommand(checkQuery, connection);
                 checkCmd.Parameters.AddWithValue("@id", brandId);
@@ -187,6 +228,35 @@ namespace Electronics_Shop2.Managers
             catch (Exception ex)
             {
                 HandleException(ex, "deleting brand");
+            }
+            finally
+            {
+                EnsureConnectionClosed();
+            }
+        }
+
+        // Helper method to get brand name by ID (useful for other managers)
+        public string GetBrandNameById(int brandId)
+        {
+            try
+            {
+                EnsureConnectionOpen();
+
+                string query = "SELECT Brand_Name FROM Brands WHERE id_Brand = @id";
+                using var command = new NpgsqlCommand(query, connection);
+                command.Parameters.AddWithValue("@id", brandId);
+
+                var result = command.ExecuteScalar();
+                return result?.ToString() ?? "Unknown Brand";
+            }
+            catch (Exception ex)
+            {
+                HandleException(ex, "getting brand name");
+                return "Unknown Brand";
+            }
+            finally
+            {
+                EnsureConnectionClosed();
             }
         }
     }

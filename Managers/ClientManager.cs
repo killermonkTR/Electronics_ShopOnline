@@ -76,14 +76,15 @@ namespace Electronics_Shop2.Managers
             string address = Console.ReadLine() ?? "";
 
             string query = @"INSERT INTO Clients (Name, Email, Phone_Number, Address, Registration_Date) 
-                            VALUES (@name, @email, @phone, @address, CURDATE()); 
-                            SELECT LAST_INSERT_ID();";
+                 VALUES (@name, @email, @phone, @address, @regDate)
+                 RETURNING id_Client;";
 
             using var command = new NpgsqlCommand(query, connection);
             command.Parameters.AddWithValue("@name", name);
             command.Parameters.AddWithValue("@email", string.IsNullOrEmpty(email) ? DBNull.Value : email);
             command.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(phone) ? DBNull.Value : phone);
             command.Parameters.AddWithValue("@address", string.IsNullOrEmpty(address) ? DBNull.Value : address);
+            command.Parameters.AddWithValue("@regDate", DateTime.Today); // Add this
 
             int newId = Convert.ToInt32(command.ExecuteScalar());
             Console.WriteLine($"✅ Client '{name}' added with ID: {newId}");

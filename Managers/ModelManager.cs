@@ -1,14 +1,11 @@
 ﻿using Electronics_Shop2.Data;
 using Electronics_Shop2.Models;
-using Electronics_Shop2.Managers;
 using Npgsql;
-
 
 namespace Electronics_Shop2.Managers
 {
     public class ModelManager : BaseManager
     {
-      
         public void ShowModelManagementMenu()
         {
             while (true)
@@ -41,153 +38,205 @@ namespace Electronics_Shop2.Managers
 
         public void ViewAllModels()
         {
-            Console.WriteLine("\n=== All Models ===");
-            string query = @"
-            SELECT pm.id_Model, pm.Phone_Model, b.Brand_Name, b.id_Brand
-            FROM Phone_Models pm
-            JOIN Brands b ON pm.id_Brand = b.id_Brand
-            ORDER BY b.Brand_Name, pm.Phone_Model";
-
-            using var command = new NpgsqlCommand(query, connection);
-            using var reader = command.ExecuteReader();
-
-            while (reader.Read())
+            try
             {
-                Console.WriteLine($"ID: {reader["id_Model"]} | Model: {reader["Phone_Model"]} | Brand: {reader["Brand_Name"]}");
+                EnsureConnectionOpen();
+                Console.WriteLine("\n=== All Models ===");
+                string query = @"
+                SELECT pm.id_Model, pm.Phone_Model, b.Brand_Name, b.id_Brand
+                FROM Phone_Models pm
+                JOIN Brands b ON pm.id_Brand = b.id_Brand
+                ORDER BY b.Brand_Name, pm.Phone_Model";
+
+                using var command = new NpgsqlCommand(query, connection);
+                using var reader = command.ExecuteReader();
+
+                while (reader.Read())
+                {
+                    Console.WriteLine($"ID: {reader["id_Model"]} | Model: {reader["Phone_Model"]} | Brand: {reader["Brand_Name"]}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error viewing models: {ex.Message}");
             }
         }
 
         public int AddNewModel()
         {
-            EnsureConnectionOpen();
-            // Show available brands
-            Console.WriteLine("\n=== Available Brands ===");
-            string brandQuery = "SELECT id_Brand, Brand_Name FROM Brands ORDER BY Brand_Name";
-            using var brandCmd = new NpgsqlCommand(brandQuery, connection);
-            using var brandReader = brandCmd.ExecuteReader();
-
-            while (brandReader.Read())
+            try
             {
-                Console.WriteLine($"ID: {brandReader["id_Brand"]} | {brandReader["Brand_Name"]}");
+                EnsureConnectionOpen();
+
+                // Show available brands
+                Console.WriteLine("\n=== Available Brands ===");
+                string brandQuery = "SELECT id_Brand, Brand_Name FROM Brands ORDER BY Brand_Name";
+                using var brandCmd = new NpgsqlCommand(brandQuery, connection);
+                using var brandReader = brandCmd.ExecuteReader();
+
+                while (brandReader.Read())
+                {
+                    Console.WriteLine($"ID: {brandReader["id_Brand"]} | {brandReader["Brand_Name"]}");
+                }
+                brandReader.Close();
+
+                Console.Write("Enter brand ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int brandId))
+                {
+                    Console.WriteLine("Invalid brand ID!");
+                    return -1;
+                }
+
+                Console.Write("Enter model name: ");
+                string modelName = Console.ReadLine()?.Trim();
+
+                if (string.IsNullOrWhiteSpace(modelName))
+                {
+                    Console.WriteLine("Model name cannot be empty!");
+                    return -1;
+                }
+
+                // Check if model already exists for this brand
+                string checkQuery = "SELECT id_Model FROM Phone_Models WHERE Phone_Model = @model AND id_Brand = @brandId";
+                using var checkCmd = new NpgsqlCommand(checkQuery, connection);
+                checkCmd.Parameters.AddWithValue("@model", modelName);
+                checkCmd.Parameters.AddWithValue("@brandId", brandId);
+
+                var existingId = checkCmd.ExecuteScalar();
+                if (existingId != null)
+                {
+                    Console.WriteLine($"Model '{modelName}' already exists for this brand with ID: {existingId}");
+                    return Convert.ToInt32(existingId);
+                }
+
+                // Insert new model - FIXED VERSION
+                string insertQuery = "INSERT INTO Phone_Models (Phone_Model, id_Brand) VALUES (@model, @brandId) RETURNING id_Model";
+                using var insertCmd = new NpgsqlCommand(insertQuery, connection);
+                insertCmd.Parameters.AddWithValue("@model", modelName);
+                insertCmd.Parameters.AddWithValue("@brandId", brandId);
+
+                var result = insertCmd.ExecuteScalar();
+                if (result != null)
+                {
+                    int newModelId = Convert.ToInt32(result);
+                    Console.WriteLine($"✅ Model '{modelName}' added successfully with ID: {newModelId}");
+                    return newModelId;
+                }
+                else
+                {
+                    Console.WriteLine("❌ Failed to add model - no ID returned");
+                    return -1;
+                }
             }
-            brandReader.Close();
-
-            Console.Write("Enter brand ID: ");
-            if (!int.TryParse(Console.ReadLine(), out int brandId))
+            catch (PostgresException pgEx)
             {
-                Console.WriteLine("Invalid brand ID!");
+                Console.WriteLine($"❌ Database error: {pgEx.MessageText}");
+                Console.WriteLine($"SQL State: {pgEx.SqlState}");
                 return -1;
             }
-
-            Console.Write("Enter model name: ");
-            string modelName = Console.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(modelName))
+            catch (Exception ex)
             {
-                Console.WriteLine("Model name cannot be empty!");
+                Console.WriteLine($"❌ Error adding model: {ex.Message}");
                 return -1;
             }
-
-            // Check if model already exists for this brand
-            string checkQuery = "SELECT id_Model FROM Phone_Models WHERE Phone_Model = @model AND id_Brand = @brandId";
-            using var checkCmd = new NpgsqlCommand(checkQuery, connection);
-            checkCmd.Parameters.AddWithValue("@model", modelName);
-            checkCmd.Parameters.AddWithValue("@brandId", brandId);
-
-            var existingId = checkCmd.ExecuteScalar();
-            if (existingId != null)
-            {
-                Console.WriteLine($"Model '{modelName}' already exists for this brand with ID: {existingId}");
-                return Convert.ToInt32(existingId);
-            }
-
-            // Insert new model
-            string insertQuery = "INSERT INTO Phone_Models (Phone_Model, id_Brand) VALUES (@model, @brandId); SELECT LAST_INSERT_ID();";
-            using var insertCmd = new NpgsqlCommand(insertQuery, connection);
-            insertCmd.Parameters.AddWithValue("@model", modelName);
-            insertCmd.Parameters.AddWithValue("@brandId", brandId);
-
-            int newModelId = Convert.ToInt32(insertCmd.ExecuteScalar());
-            Console.WriteLine($"✅ Model '{modelName}' added successfully with ID: {newModelId}");
-            return newModelId;
         }
 
         public void UpdateModel()
         {
-            ViewAllModels();
-            Console.Write("\nEnter model ID to update: ");
-            if (!int.TryParse(Console.ReadLine(), out int modelId))
+            try
             {
-                Console.WriteLine("Invalid ID!");
-                return;
+                ViewAllModels();
+                Console.Write("\nEnter model ID to update: ");
+                if (!int.TryParse(Console.ReadLine(), out int modelId))
+                {
+                    Console.WriteLine("Invalid ID!");
+                    return;
+                }
+
+                Console.Write("Enter new model name: ");
+                string newName = Console.ReadLine()?.Trim();
+
+                if (string.IsNullOrWhiteSpace(newName))
+                {
+                    Console.WriteLine("Model name cannot be empty!");
+                    return;
+                }
+
+                // Show brands for reassignment
+                Console.WriteLine("\n=== Available Brands ===");
+                string brandQuery = "SELECT id_Brand, Brand_Name FROM Brands ORDER BY Brand_Name";
+                using var brandCmd = new NpgsqlCommand(brandQuery, connection);
+                using var brandReader = brandCmd.ExecuteReader();
+
+                while (brandReader.Read())
+                {
+                    Console.WriteLine($"ID: {brandReader["id_Brand"]} | {brandReader["Brand_Name"]}");
+                }
+                brandReader.Close();
+
+                Console.Write("Enter new brand ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int newBrandId))
+                {
+                    Console.WriteLine("Invalid brand ID!");
+                    return;
+                }
+
+                string query = "UPDATE Phone_Models SET Phone_Model = @name, id_Brand = @brandId WHERE id_Model = @id";
+                using var command = new NpgsqlCommand(query, connection);
+                command.Parameters.AddWithValue("@name", newName);
+                command.Parameters.AddWithValue("@brandId", newBrandId);
+                command.Parameters.AddWithValue("@id", modelId);
+
+                int affected = command.ExecuteNonQuery();
+                if (affected > 0)
+                    Console.WriteLine("✅ Model updated successfully!");
+                else
+                    Console.WriteLine("❌ Model not found!");
             }
-
-            Console.Write("Enter new model name: ");
-            string newName = Console.ReadLine();
-
-            // Show brands for reassignment
-            Console.WriteLine("\n=== Available Brands ===");
-            string brandQuery = "SELECT id_Brand, Brand_Name FROM Brands ORDER BY Brand_Name";
-            using var brandCmd = new NpgsqlCommand(brandQuery, connection);
-            using var brandReader = brandCmd.ExecuteReader();
-
-            while (brandReader.Read())
+            catch (Exception ex)
             {
-                Console.WriteLine($"ID: {brandReader["id_Brand"]} | {brandReader["Brand_Name"]}");
+                Console.WriteLine($"❌ Error updating model: {ex.Message}");
             }
-            brandReader.Close();
-
-            Console.Write("Enter new brand ID: ");
-            if (!int.TryParse(Console.ReadLine(), out int newBrandId))
-            {
-                Console.WriteLine("Invalid brand ID!");
-                return;
-            }
-
-            string query = "UPDATE Phone_Models SET Phone_Model = @name, id_Brand = @brandId WHERE id_Model = @id";
-            using var command = new NpgsqlCommand(query, connection);
-            command.Parameters.AddWithValue("@name", newName);
-            command.Parameters.AddWithValue("@brandId", newBrandId);
-            command.Parameters.AddWithValue("@id", modelId);
-
-            int affected = command.ExecuteNonQuery();
-            if (affected > 0)
-                Console.WriteLine("✅ Model updated successfully!");
-            else
-                Console.WriteLine("❌ Model not found!");
         }
 
         public void DeleteModel()
         {
-            ViewAllModels();
-            Console.Write("\nEnter model ID to delete: ");
-            if (!int.TryParse(Console.ReadLine(), out int modelId))
+            try
             {
-                Console.WriteLine("Invalid ID!");
-                return;
+                ViewAllModels();
+                Console.Write("\nEnter model ID to delete: ");
+                if (!int.TryParse(Console.ReadLine(), out int modelId))
+                {
+                    Console.WriteLine("Invalid ID!");
+                    return;
+                }
+
+                // Check if model has products
+                string checkQuery = "SELECT COUNT(*) FROM Products WHERE id_Model = @id";
+                using var checkCmd = new NpgsqlCommand(checkQuery, connection);
+                checkCmd.Parameters.AddWithValue("@id", modelId);
+
+                int productCount = Convert.ToInt32(checkCmd.ExecuteScalar());
+                if (productCount > 0)
+                {
+                    Console.WriteLine($"❌ Cannot delete model! It has {productCount} products associated.");
+                    return;
+                }
+
+                string deleteQuery = "DELETE FROM Phone_Models WHERE id_Model = @id";
+                using var deleteCmd = new NpgsqlCommand(deleteQuery, connection);
+                deleteCmd.Parameters.AddWithValue("@id", modelId);
+
+                int affected = deleteCmd.ExecuteNonQuery();
+                if (affected > 0)
+                    Console.WriteLine("✅ Model deleted successfully!");
+                else
+                    Console.WriteLine("❌ Model not found!");
             }
-
-            // Check if model has products
-            string checkQuery = "SELECT COUNT(*) FROM Products WHERE id_Model = @id";
-            using var checkCmd = new NpgsqlCommand(checkQuery, connection);
-            checkCmd.Parameters.AddWithValue("@id", modelId);
-
-            int productCount = Convert.ToInt32(checkCmd.ExecuteScalar());
-            if (productCount > 0)
+            catch (Exception ex)
             {
-                Console.WriteLine($"❌ Cannot delete model! It has {productCount} products associated.");
-                return;
+                Console.WriteLine($"❌ Error deleting model: {ex.Message}");
             }
-
-            string deleteQuery = "DELETE FROM Phone_Models WHERE id_Model = @id";
-            using var deleteCmd = new NpgsqlCommand(deleteQuery, connection);
-            deleteCmd.Parameters.AddWithValue("@id", modelId);
-
-            int affected = deleteCmd.ExecuteNonQuery();
-            if (affected > 0)
-                Console.WriteLine("✅ Model deleted successfully!");
-            else
-                Console.WriteLine("❌ Model not found!");
         }
     }
 }
