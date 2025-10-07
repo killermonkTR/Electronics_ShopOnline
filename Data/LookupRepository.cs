@@ -1,9 +1,6 @@
 ﻿// Data/LookupRepository.cs
 using Electronics_Shop2.Models;
 using Npgsql;
-using Npgsql;
-using System;
-using System.Collections.Generic;
 using System.Data;
 
 namespace Electronics_Shop2.Data

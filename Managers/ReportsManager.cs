@@ -213,53 +213,67 @@ namespace Electronics_Shop2.Managers
                 Console.WriteLine("💰 REVENUE ANALYTICS");
                 Console.WriteLine("====================\n");
 
-                // Monthly Revenue
+                // Monthly Revenue - FIXED for PostgreSQL
                 Console.WriteLine("📅 MONTHLY REVENUE:");
                 string monthlyQuery = @"
-                    SELECT 
-                        DATE_FORMAT(Order_Date, '%Y-%m') as Month,
-                        COUNT(*) as OrderCount,
-                        SUM(Total_Price) as MonthlyRevenue,
-                        AVG(Total_Price) as AvgOrderValue
-                    FROM Orders
-                    GROUP BY DATE_FORMAT(Order_Date, '%Y-%m')
-                    ORDER BY Month DESC
-                    LIMIT 6";
+            SELECT 
+                TO_CHAR(Order_Date, 'YYYY-MM') as Month,
+                COUNT(*) as OrderCount,
+                SUM(Total_Price) as MonthlyRevenue,
+                AVG(Total_Price) as AvgOrderValue
+            FROM Orders
+            GROUP BY TO_CHAR(Order_Date, 'YYYY-MM')
+            ORDER BY Month DESC
+            LIMIT 6";
 
                 using var monthlyCmd = new NpgsqlCommand(monthlyQuery, connection);
                 using var monthlyReader = monthlyCmd.ExecuteReader();
 
+                bool hasMonthlyData = false;
                 while (monthlyReader.Read())
                 {
+                    hasMonthlyData = true;
                     Console.WriteLine($"   {GetSafeString(monthlyReader["Month"])}");
                     Console.WriteLine($"     Orders: {GetSafeInt(monthlyReader["OrderCount"])}");
                     Console.WriteLine($"     Revenue: ${GetSafeDecimal(monthlyReader["MonthlyRevenue"]):F2}");
                     Console.WriteLine($"     Avg Order: ${GetSafeDecimal(monthlyReader["AvgOrderValue"]):F2}");
                     Console.WriteLine("     ─────────────────────────────────");
                 }
+
+                if (!hasMonthlyData)
+                {
+                    Console.WriteLine("   No revenue data available yet.");
+                }
                 monthlyReader.Close();
 
                 // Revenue by Payment Type
                 Console.WriteLine("\n💳 REVENUE BY PAYMENT METHOD:");
                 string paymentQuery = @"
-                    SELECT 
-                        pt.Payment_Type,
-                        COUNT(o.id_Order) as OrderCount,
-                        SUM(o.Total_Price) as TotalRevenue
-                    FROM Orders o
-                    JOIN Payment_Types pt ON o.id_Payment_Type = pt.id_Payment_Type
-                    GROUP BY pt.Payment_Type
-                    ORDER BY TotalRevenue DESC";
+            SELECT 
+                pt.Payment_Type,
+                COUNT(o.id_Order) as OrderCount,
+                SUM(o.Total_Price) as TotalRevenue
+            FROM Orders o
+            JOIN Payment_Types pt ON o.id_Payment_Type = pt.id_Payment_Type
+            GROUP BY pt.Payment_Type
+            ORDER BY TotalRevenue DESC";
 
                 using var paymentCmd = new NpgsqlCommand(paymentQuery, connection);
                 using var paymentReader = paymentCmd.ExecuteReader();
 
+                bool hasPaymentData = false;
                 while (paymentReader.Read())
                 {
+                    hasPaymentData = true;
                     Console.WriteLine($"   {GetSafeString(paymentReader["Payment_Type"])}");
                     Console.WriteLine($"     Orders: {GetSafeInt(paymentReader["OrderCount"])}");
                     Console.WriteLine($"     Revenue: ${GetSafeDecimal(paymentReader["TotalRevenue"]):F2}");
                     Console.WriteLine("     ─────────────────────────────────");
+                }
+
+                if (!hasPaymentData)
+                {
+                    Console.WriteLine("   No payment data available yet.");
                 }
             }
             catch (Exception ex)
@@ -282,23 +296,23 @@ namespace Electronics_Shop2.Managers
                 Console.WriteLine("====================\n");
 
                 string query = @"
-                    SELECT 
-                        p.id_Product,
-                        p.Product_Name,
-                        b.Brand_Name,
-                        c.Category_Name,
-                        p.Price,
-                        p.Stock_Quantity,
-                        SUM(op.Amount) as TotalSold,
-                        SUM(op.Item_Total) as TotalRevenue
-                    FROM Products p
-                    JOIN Phone_Models pm ON p.id_Model = pm.id_Model
-                    JOIN Brands b ON pm.id_Brand = b.id_Brand
-                    JOIN Categories c ON p.id_Category = c.id_Category
-                    LEFT JOIN Ordered_Price op ON p.id_Product = op.id_Product
-                    GROUP BY p.id_Product, p.Product_Name, b.Brand_Name, c.Category_Name, p.Price, p.Stock_Quantity
-                    ORDER BY TotalRevenue DESC, TotalSold DESC
-                    LIMIT 10";
+            SELECT 
+                p.id_Product,
+                p.Product_Name,
+                b.Brand_Name,
+                c.Category_Name,
+                p.Price,
+                p.Stock_Quantity,
+                COALESCE(SUM(op.Amount), 0) as TotalSold,
+                COALESCE(SUM(op.Item_Total), 0) as TotalRevenue
+            FROM Products p
+            JOIN Phone_Models pm ON p.id_Model = pm.id_Model
+            JOIN Brands b ON pm.id_Brand = b.id_Brand
+            JOIN Categories c ON p.id_Category = c.id_Category
+            LEFT JOIN Ordered_Price op ON p.id_Product = op.id_Product
+            GROUP BY p.id_Product, p.Product_Name, b.Brand_Name, c.Category_Name, p.Price, p.Stock_Quantity
+            ORDER BY TotalRevenue DESC, TotalSold DESC
+            LIMIT 10";
 
                 using var command = new NpgsqlCommand(query, connection);
                 using var reader = command.ExecuteReader();
@@ -328,7 +342,6 @@ namespace Electronics_Shop2.Managers
                 EnsureConnectionClosed();
             }
         }
-
         public void GenerateStaffPerformanceReport()
         {
             try
@@ -339,20 +352,23 @@ namespace Electronics_Shop2.Managers
                 Console.WriteLine("====================\n");
 
                 string query = @"
-                    SELECT 
-                        s.id_Staff,
-                        s.Staff_Name,
-                        p.Position,
-                        s.Hire_Date,
-                        COUNT(o.id_Order) as OrdersProcessed,
-                        SUM(o.Total_Price) as TotalRevenue,
-                        AVG(o.Total_Price) as AvgOrderValue,
-                        MAX(o.Order_Date) as LastOrderDate
-                    FROM Staff s
-                    JOIN Positions p ON s.id_Position = p.id_Position
-                    LEFT JOIN Orders o ON s.id_Staff = o.id_Staff
-                    GROUP BY s.id_Staff, s.Staff_Name, p.Position, s.Hire_Date
-                    ORDER BY TotalRevenue DESC, OrdersProcessed DESC";
+            SELECT 
+                s.id_Staff,
+                s.Staff_Name,
+                p.Position,
+                s.Hire_Date,
+                COUNT(o.id_Order) as OrdersProcessed,
+                COALESCE(SUM(o.Total_Price), 0) as TotalRevenue,
+                COALESCE(AVG(o.Total_Price), 0) as AvgOrderValue,
+                MAX(o.Order_Date) as LastOrderDate
+            FROM Staff s
+            JOIN Positions p ON s.id_Position = p.id_Position
+            LEFT JOIN Orders o ON s.id_Staff = o.id_Staff
+            GROUP BY s.id_Staff, s.Staff_Name, p.Position, s.Hire_Date
+            ORDER BY 
+                CASE WHEN COALESCE(SUM(o.Total_Price), 0) = 0 THEN 1 ELSE 0 END,
+                TotalRevenue DESC, 
+                OrdersProcessed DESC";
 
                 using var command = new NpgsqlCommand(query, connection);
                 using var reader = command.ExecuteReader();
@@ -362,15 +378,19 @@ namespace Electronics_Shop2.Managers
                 while (reader.Read())
                 {
                     string staffName = GetSafeString(reader["Staff_Name"]);
+                    string position = GetSafeString(reader["Position"]);
                     int ordersProcessed = GetSafeInt(reader["OrdersProcessed"]);
                     decimal totalRevenue = GetSafeDecimal(reader["TotalRevenue"]);
+                    decimal avgOrderValue = GetSafeDecimal(reader["AvgOrderValue"]);
+                    DateTime? lastOrderDate = reader["LastOrderDate"] as DateTime?;
+                    DateTime hireDate = (DateTime)reader["Hire_Date"];
 
-                    Console.WriteLine($"   {rank}. {staffName} ({GetSafeString(reader["Position"])})");
+                    Console.WriteLine($"   {rank}. {staffName} ({position})");
                     Console.WriteLine($"      Orders Processed: {ordersProcessed}");
                     Console.WriteLine($"      Total Revenue: ${totalRevenue:F2}");
-                    Console.WriteLine($"      Avg Order Value: ${GetSafeDecimal(reader["AvgOrderValue"]):F2}");
-                    Console.WriteLine($"      Last Order: {GetSafeString(reader["LastOrderDate"]):d}");
-                    Console.WriteLine($"      Hired: {GetSafeString(reader["Hire_Date"]):d}");
+                    Console.WriteLine($"      Avg Order Value: ${avgOrderValue:F2}");
+                    Console.WriteLine($"      Last Order: {(lastOrderDate.HasValue ? lastOrderDate.Value.ToString("yyyy-MM-dd") : "No orders")}");
+                    Console.WriteLine($"      Hired: {hireDate:yyyy-MM-dd}");
                     Console.WriteLine("      ─────────────────────────────────");
                     rank++;
                 }
@@ -384,5 +404,6 @@ namespace Electronics_Shop2.Managers
                 EnsureConnectionClosed();
             }
         }
+
     }
 }

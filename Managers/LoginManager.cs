@@ -34,11 +34,29 @@ namespace Electronics_Shop2.Managers
                 }
                 reader.Close();
 
-                Console.Write("\nEnter your Staff ID: ");
-                if (!int.TryParse(Console.ReadLine(), out int staffId))
+               
+                int attempts = 0 , staffId = 0, maxAttempts = 3;
+
+                while (attempts < maxAttempts)
                 {
-                    Console.WriteLine("❌ Invalid Staff ID!");
-                    return (0, "", false);
+                    Console.Write("\nEnter your Staff ID: ");
+                    if (int.TryParse(Console.ReadLine(), out staffId))
+                    {
+                        break; // Valid input, exit the loop
+                    }
+
+                    attempts++;
+                    Console.WriteLine("❌ Invalid Staff ID! Please enter a valid number.");
+
+                    if (attempts < maxAttempts)
+                    {
+                        Console.WriteLine($"You have {maxAttempts - attempts} attempt(s) remaining.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("❌ Maximum attempts reached. Please contact administrator.");
+                        return (0, "", false);
+                    }
                 }
 
                 // Verify staff exists

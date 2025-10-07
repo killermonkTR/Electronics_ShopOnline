@@ -64,64 +64,222 @@ namespace Electronics_Shop2.Managers
             }
         }
 
+
         public int AddNewClient()
         {
             Console.Write("Enter client name: ");
-            string name = Console.ReadLine() ?? "";
+            string name = Console.ReadLine()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(name))
+            {
+                Console.WriteLine("❌ Client name cannot be empty!");
+                return -1;
+            }
+
             Console.Write("Enter email: ");
-            string email = Console.ReadLine() ?? "";
+            string email = Console.ReadLine()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(email))
+            {
+                Console.WriteLine("❌ Email cannot be empty!");
+                return -1;
+            }
+
             Console.Write("Enter phone number: ");
-            string phone = Console.ReadLine() ?? "";
+            string phone = Console.ReadLine()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(phone))
+            {
+                Console.WriteLine("❌ Phone number cannot be empty!");
+                return -1;
+            }
+
             Console.Write("Enter address: ");
-            string address = Console.ReadLine() ?? "";
+            string address = Console.ReadLine()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(address))
+            {
+                Console.WriteLine("❌ Address cannot be empty!");
+                return -1;
+            }
 
             string query = @"INSERT INTO Clients (Name, Email, Phone_Number, Address, Registration_Date) 
-                 VALUES (@name, @email, @phone, @address, @regDate)
-                 RETURNING id_Client;";
+             VALUES (@name, @email, @phone, @address, @regDate)
+             RETURNING id_Client;";
 
             using var command = new NpgsqlCommand(query, connection);
             command.Parameters.AddWithValue("@name", name);
-            command.Parameters.AddWithValue("@email", string.IsNullOrEmpty(email) ? DBNull.Value : email);
-            command.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(phone) ? DBNull.Value : phone);
-            command.Parameters.AddWithValue("@address", string.IsNullOrEmpty(address) ? DBNull.Value : address);
-            command.Parameters.AddWithValue("@regDate", DateTime.Today); // Add this
+            command.Parameters.AddWithValue("@email", email);
+            command.Parameters.AddWithValue("@phone", phone);
+            command.Parameters.AddWithValue("@address", address);
+            command.Parameters.AddWithValue("@regDate", DateTime.Today);
 
             int newId = Convert.ToInt32(command.ExecuteScalar());
             Console.WriteLine($"✅ Client '{name}' added with ID: {newId}");
             return newId;
         }
 
-    
-
-
-public void UpdateClient()
+        public void UpdateClient()
         {
-            ViewAllClients();
-            Console.Write("\nEnter client ID to update: ");
-            if (!int.TryParse(Console.ReadLine(), out int clientId)) return;
+            try
+            {
+                EnsureConnectionOpen();
 
-            Console.Write("Enter new name: ");
-            string name = Console.ReadLine();
-            Console.Write("Enter new email: ");
-            string email = Console.ReadLine();
-            Console.Write("Enter new phone: ");
-            string phone = Console.ReadLine();
-            Console.Write("Enter new address: ");
-            string address = Console.ReadLine();
+                ViewAllClients();
+                Console.Write("\nEnter client ID to update: ");
+                if (!int.TryParse(Console.ReadLine(), out int clientId)) return;
 
-            string query = @"UPDATE Clients SET Name = @name, Email = @email, 
-                        Phone_Number = @phone, Address = @address 
-                        WHERE id_Client = @id";
+                // Check if client exists
+                string checkQuery = "SELECT Name FROM Clients WHERE id_Client = @id";
+                using var checkCmd = new NpgsqlCommand(checkQuery, connection);
+                checkCmd.Parameters.AddWithValue("@id", clientId);
+                var clientName = checkCmd.ExecuteScalar()?.ToString();
 
-            using var command = new NpgsqlCommand(query, connection);
-            command.Parameters.AddWithValue("@name", name);
-            command.Parameters.AddWithValue("@email", string.IsNullOrEmpty(email) ? DBNull.Value : email);
-            command.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(phone) ? DBNull.Value : phone);
-            command.Parameters.AddWithValue("@address", string.IsNullOrEmpty(address) ? DBNull.Value : address);
-            command.Parameters.AddWithValue("@id", clientId);
+                if (clientName == null)
+                {
+                    Console.WriteLine("❌ Client not found!");
+                    return;
+                }
 
-            int affected = command.ExecuteNonQuery();
-            Console.WriteLine(affected > 0 ? "✅ Client updated!" : "❌ Client not found!");
+                Console.WriteLine($"\nUpdating client: {clientName} (ID: {clientId})");
+                Console.WriteLine("What would you like to update?");
+                Console.WriteLine("1. Name");
+                Console.WriteLine("2. Email");
+                Console.WriteLine("3. Phone Number");
+                Console.WriteLine("4. Address");
+                Console.WriteLine("5. Update Everything");
+                Console.WriteLine("6. Cancel");
+                Console.Write("Choose option: ");
+
+                var choice = Console.ReadLine();
+                string updateQuery = "";
+                int affected = 0;
+
+                switch (choice)
+                {
+                    case "1": // Update Name
+                        Console.Write("Enter new name: ");
+                        string newName = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(newName))
+                        {
+                            Console.WriteLine("❌ Name cannot be empty!");
+                            return;
+                        }
+                        updateQuery = "UPDATE Clients SET Name = @name WHERE id_Client = @id";
+                        using (var cmd = new NpgsqlCommand(updateQuery, connection))
+                        {
+                            cmd.Parameters.AddWithValue("@name", newName);
+                            cmd.Parameters.AddWithValue("@id", clientId);
+                            affected = cmd.ExecuteNonQuery();
+                        }
+                        break;
+
+                    case "2": // Update Email
+                        Console.Write("Enter new email: ");
+                        string newEmail = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(newEmail))
+                        {
+                            Console.WriteLine("❌ Email cannot be empty!");
+                            return;
+                        }
+                        updateQuery = "UPDATE Clients SET Email = @email WHERE id_Client = @id";
+                        using (var cmd = new NpgsqlCommand(updateQuery, connection))
+                        {
+                            cmd.Parameters.AddWithValue("@email", newEmail);
+                            cmd.Parameters.AddWithValue("@id", clientId);
+                            affected = cmd.ExecuteNonQuery();
+                        }
+                        break;
+
+                    case "3": // Update Phone
+                        Console.Write("Enter new phone number: ");
+                        string newPhone = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(newPhone))
+                        {
+                            Console.WriteLine("❌ Phone number cannot be empty!");
+                            return;
+                        }
+                        updateQuery = "UPDATE Clients SET Phone_Number = @phone WHERE id_Client = @id";
+                        using (var cmd = new NpgsqlCommand(updateQuery, connection))
+                        {
+                            cmd.Parameters.AddWithValue("@phone", newPhone);
+                            cmd.Parameters.AddWithValue("@id", clientId);
+                            affected = cmd.ExecuteNonQuery();
+                        }
+                        break;
+
+                    case "4": // Update Address
+                        Console.Write("Enter new address: ");
+                        string newAddress = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(newAddress))
+                        {
+                            Console.WriteLine("❌ Address cannot be empty!");
+                            return;
+                        }
+                        updateQuery = "UPDATE Clients SET Address = @address WHERE id_Client = @id";
+                        using (var cmd = new NpgsqlCommand(updateQuery, connection))
+                        {
+                            cmd.Parameters.AddWithValue("@address", newAddress);
+                            cmd.Parameters.AddWithValue("@id", clientId);
+                            affected = cmd.ExecuteNonQuery();
+                        }
+                        break;
+
+                    case "5": // Update Everything
+                        Console.Write("Enter new name: ");
+                        string name = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(name))
+                        {
+                            Console.WriteLine("❌ Name cannot be empty!");
+                            return;
+                        }
+                        Console.Write("Enter new email: ");
+                        string email = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(email))
+                        {
+                            Console.WriteLine("❌ Email cannot be empty!");
+                            return;
+                        }
+                        Console.Write("Enter new phone: ");
+                        string phone = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(phone))
+                        {
+                            Console.WriteLine("❌ Phone number cannot be empty!");
+                            return;
+                        }
+                        Console.Write("Enter new address: ");
+                        string address = Console.ReadLine()?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(address))
+                        {
+                            Console.WriteLine("❌ Address cannot be empty!");
+                            return;
+                        }
+
+                        updateQuery = @"UPDATE Clients SET Name = @name, Email = @email, 
+                            Phone_Number = @phone, Address = @address 
+                            WHERE id_Client = @id";
+                        using (var cmd = new NpgsqlCommand(updateQuery, connection))
+                        {
+                            cmd.Parameters.AddWithValue("@name", name);
+                            cmd.Parameters.AddWithValue("@email", email);
+                            cmd.Parameters.AddWithValue("@phone", phone);
+                            cmd.Parameters.AddWithValue("@address", address);
+                            cmd.Parameters.AddWithValue("@id", clientId);
+                            affected = cmd.ExecuteNonQuery();
+                        }
+                        break;
+
+                    case "6": // Cancel
+                        Console.WriteLine("Update cancelled!");
+                        return;
+
+                    default:
+                        Console.WriteLine("❌ Invalid option!");
+                        return;
+                }
+
+                Console.WriteLine(affected > 0 ? "✅ Client updated successfully!" : "❌ No changes made!");
+            }
+            catch (Exception ex)
+            {
+                HandleException(ex, "updating client");
+            }
         }
 
         public void RemoveClient()
